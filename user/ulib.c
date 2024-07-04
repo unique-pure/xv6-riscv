@@ -54,6 +54,7 @@ memset(void *dst, int c, uint n)
   return dst;
 }
 
+// find first occurrence of c in s
 char*
 strchr(const char *s, char c)
 {

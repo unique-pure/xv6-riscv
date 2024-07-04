@@ -82,7 +82,9 @@ runcmd(struct cmd *cmd)
 
   case REDIR:
     rcmd = (struct redircmd*)cmd;
+    // close the original file descriptor
     close(rcmd->fd);
+    // open the file with the specified mode
     if(open(rcmd->file, rcmd->mode) < 0){
       fprintf(2, "open %s failed\n", rcmd->file);
       exit(1);
@@ -92,6 +94,7 @@ runcmd(struct cmd *cmd)
 
   case LIST:
     lcmd = (struct listcmd*)cmd;
+    // run the left command first, wait for it to finish, then run the right command
     if(fork1() == 0)
       runcmd(lcmd->left);
     wait(0);
@@ -100,18 +103,25 @@ runcmd(struct cmd *cmd)
 
   case PIPE:
     pcmd = (struct pipecmd*)cmd;
+    // create a pipe
     if(pipe(p) < 0)
       panic("pipe");
-    if(fork1() == 0){
+    if(fork1() == 0){ // First child process runs the left command
+      // Close the standard output file descriptor
       close(1);
+      // Duplicate the write end of the pipe to the standard output
       dup(p[1]);
+      // Close both ends of the pipe not needed in this process
       close(p[0]);
       close(p[1]);
       runcmd(pcmd->left);
     }
-    if(fork1() == 0){
+    if(fork1() == 0){ // Second child process runs the right command
+      // Close the standard input file descriptor
       close(0);
+      // Duplicate the read end of the pipe to the standard input
       dup(p[0]);
+      // Close both ends of the pipe not needed in this process
       close(p[0]);
       close(p[1]);
       runcmd(pcmd->right);
@@ -124,6 +134,7 @@ runcmd(struct cmd *cmd)
 
   case BACK:
     bcmd = (struct backcmd*)cmd;
+    // let the child process run the command, parent process does not wait for the child process to finish
     if(fork1() == 0)
       runcmd(bcmd->cmd);
     break;
@@ -148,7 +159,8 @@ main(void)
   static char buf[100];
   int fd;
 
-  // Ensure that three file descriptors are open.
+  // Ensure that three file descriptors(0, 1, 2) are open. 
+  // Notice open() returns the lowest free file descriptor. when return value is 3, it means that file descriptors 0, 1, 2 are already open.
   while((fd = open("console", O_RDWR)) >= 0){
     if(fd >= 3){
       close(fd);
@@ -161,12 +173,13 @@ main(void)
     if(buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' '){
       // Chdir must be called by the parent, not the child.
       buf[strlen(buf)-1] = 0;  // chop \n
-      if(chdir(buf+3) < 0)
+      if(chdir(buf+3) < 0) // buf+3 skips "cd "
         fprintf(2, "cannot cd %s\n", buf+3);
       continue;
     }
-    if(fork1() == 0)
+    if(fork1() == 0) // let the child process run the command
       runcmd(parsecmd(buf));
+    // the parent process waits for the child process to finish
     wait(0);
   }
   exit(0);
@@ -314,9 +327,11 @@ peek(char **ps, char *es, char *toks)
   char *s;
 
   s = *ps;
+  // skip whitespace
   while(s < es && strchr(whitespace, *s))
     s++;
   *ps = s;
+  // indicates whether the next token is in the toks string
   return *s && strchr(toks, *s);
 }
 
@@ -331,6 +346,7 @@ parsecmd(char *s)
   char *es;
   struct cmd *cmd;
 
+  // s and es are pointers to the start and end of the string, respectively.
   es = s + strlen(s);
   cmd = parseline(&s, es);
   peek(&s, es, "");
@@ -347,6 +363,7 @@ parseline(char **ps, char *es)
 {
   struct cmd *cmd;
 
+  // parse pipelines first
   cmd = parsepipe(ps, es);
   while(peek(ps, es, "&")){
     gettoken(ps, es, 0, 0);

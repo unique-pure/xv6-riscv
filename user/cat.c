@@ -26,13 +26,13 @@ main(int argc, char *argv[])
 {
   int fd, i;
 
-  if(argc <= 1){
+  if(argc <= 1){ // If no arguments are passed, read from standard input.
     cat(0);
     exit(0);
   }
 
   for(i = 1; i < argc; i++){
-    if((fd = open(argv[i], 0)) < 0){
+    if((fd = open(argv[i], 0)) < 0){  // Open the file in read-only mode.
       fprintf(2, "cat: cannot open %s\n", argv[i]);
       exit(1);
     }
